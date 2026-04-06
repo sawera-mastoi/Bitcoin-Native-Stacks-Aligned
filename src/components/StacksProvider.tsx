@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { useToast } from "./ui/ToastProvider";
 
 interface StacksContextType {
   userData: any;
@@ -116,27 +117,22 @@ export function StacksProvider({ children }: { children: ReactNode }) {
   };
 
   const disconnectWallet = () => {
-    if (sdks?.session) {
-      sdks.session.signUserOut();
-      setUserData(null);
-      window.location.reload();
-    }
-  };
-
   const [txStatus, setTxStatus] = useState<"idle" | "pending" | "success" | "failed">("idle");
   const [lastTxId, setLastTxId] = useState<string | null>(null);
+
+  const { toast } = useToast();
 
   const pollTxStatus = async (txId: string) => {
     setTxStatus("pending");
     setLastTxId(txId);
+    toast({ title: "Transaction Broadcasted", description: "Monitoring status on-chain...", variant: "loading" });
 
     const check = async (): Promise<"success" | "pending" | "failed" | "dropped"> => {
       try {
         const { HIRO_API_BASE } = await import("@/config/constants");
-        const { HiroTxResponse } = await import("@/types/dashboard");
         const res = await fetch(`${HIRO_API_BASE}/extended/v1/tx/${txId}`);
         if (!res.ok) return "pending";
-        const data: any = await res.json(); // Use any for raw then cast if needed
+        const data: any = await res.json();
         return data.tx_status;
       } catch (e) {
         return "pending";
@@ -147,47 +143,70 @@ export function StacksProvider({ children }: { children: ReactNode }) {
       const status = await check();
       if (status === "success") {
         setTxStatus("success");
+        toast({ title: "Transaction Confirmed", description: "Check-in successful!", variant: "success" });
         clearInterval(interval);
         setTimeout(() => setTxStatus("idle"), 10000);
       } else if (status === "failed" || status === "dropped") {
         setTxStatus("failed");
+        toast({ title: "Transaction Failed", description: `Status: ${status}`, variant: "error" });
         clearInterval(interval);
         setTimeout(() => setTxStatus("idle"), 10000);
       }
     }, 10000);
   };
 
+  const connectWallet = () => {
+    if (!sdks) return;
+    sdks.connect.showConnect({
+      appConfig: sdks.session.appConfig,
+      appDetails: {
+        name: "Stacks Aligned",
+        icon: "https://cryptologos.cc/logos/stacks-stx-logo.png",
+      },
+      userSession: sdks.session,
+      onFinish: () => {
+        const user = sdks.session.loadUserData();
+        setUserData(user);
+        toast({ title: "Wallet Connected", description: "Successfully authenticated with Stacks.", variant: "success" });
+      },
+      onCancel: () => {
+        toast({ title: "Connection Cancelled", variant: "info" });
+      }
+    });
+  };
+
+  const disconnectWallet = () => {
+    if (!sdks) return;
+    sdks.session.signUserOut();
+    setUserData(null);
+    toast({ title: "Wallet Disconnected", variant: "info" });
+  };
+
   const doCheckIn = async () => {
     if (!sdks || !userData) return;
     setIsCheckingIn(true);
-    setShowSuccess(false);
-
     try {
-      const network = sdks.network.STACKS_MAINNET;
-      const { STACKS_CONTRACT_ADDRESS, STACKS_CONTRACT_NAME } = await import("@/config/constants");
-
+      const { STACKS_CONTRACT_ADDRESS, STACKS_CONTRACT_NAME, NETWORK } = await import("@/config/constants");
+      
       await sdks.connect.openContractCall({
-        network,
         contractAddress: STACKS_CONTRACT_ADDRESS,
         contractName: STACKS_CONTRACT_NAME,
         functionName: "check-in",
         functionArgs: [],
-        postConditionMode: sdks.tx.PostConditionMode.Allow,
-        postConditions: [],
+        network: NETWORK === "mainnet" ? new sdks.network.StacksMainnet() : new sdks.network.StacksTestnet(),
         onFinish: (data: any) => {
-          console.log("Transaction broadcasted:", data.txId);
           setIsCheckingIn(false);
-          setShowSuccess(true);
           pollTxStatus(data.txId);
-          setTimeout(() => setShowSuccess(false), 5000);
         },
         onCancel: () => {
           setIsCheckingIn(false);
-        },
+          toast({ title: "Action Cancelled", variant: "info" });
+        }
       });
-    } catch (error) {
-      console.error("Check-in error:", error);
+    } catch (e) {
+      console.error(e);
       setIsCheckingIn(false);
+      toast({ title: "Error", description: "Failed to initiate transaction", variant: "error" });
     }
   };
 

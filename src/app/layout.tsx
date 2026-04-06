@@ -21,6 +21,7 @@ export const metadata: Metadata = {
 };
 
 import { StacksProvider } from "@/components/StacksProvider";
+import { ToastProvider } from "@/components/ui/ToastProvider";
 
 export default function RootLayout({
   children,
@@ -32,9 +33,11 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black text-white`}
       >
-        <StacksProvider>
-          {children}
-        </StacksProvider>
+        <ToastProvider>
+          <StacksProvider>
+            {children}
+          </StacksProvider>
+        </ToastProvider>
       </body>
     </html>
   );
