@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from "react";
 import { useToast } from "./ui/ToastProvider";
 
 interface StacksContextType {
@@ -122,7 +122,7 @@ export function StacksProvider({ children }: { children: ReactNode }) {
 
   const { toast } = useToast();
 
-  const pollTxStatus = async (txId: string) => {
+  const pollTxStatus = useCallback(async (txId: string) => {
     setTxStatus("pending");
     setLastTxId(txId);
     toast({ title: "Transaction Broadcasted", description: "Monitoring status on-chain...", variant: "loading" });
@@ -153,9 +153,9 @@ export function StacksProvider({ children }: { children: ReactNode }) {
         setTimeout(() => setTxStatus("idle"), 10000);
       }
     }, 10000);
-  };
+  }, [toast]);
 
-  const connectWallet = () => {
+  const connectWallet = useCallback(() => {
     if (!sdks) return;
     sdks.connect.showConnect({
       appConfig: sdks.session.appConfig,
@@ -173,16 +173,16 @@ export function StacksProvider({ children }: { children: ReactNode }) {
         toast({ title: "Connection Cancelled", variant: "info" });
       }
     });
-  };
+  }, [sdks, toast]);
 
-  const disconnectWallet = () => {
+  const disconnectWallet = useCallback(() => {
     if (!sdks) return;
     sdks.session.signUserOut();
     setUserData(null);
     toast({ title: "Wallet Disconnected", variant: "info" });
-  };
+  }, [sdks, toast]);
 
-  const doCheckIn = async () => {
+  const doCheckIn = useCallback(async () => {
     if (!sdks || !userData) return;
     setIsCheckingIn(true);
     try {
@@ -208,7 +208,7 @@ export function StacksProvider({ children }: { children: ReactNode }) {
       setIsCheckingIn(false);
       toast({ title: "Error", description: "Failed to initiate transaction", variant: "error" });
     }
-  };
+  }, [sdks, userData, pollTxStatus, toast]);
 
   const doPulse = async () => {
     if (!sdks || !userData) return;

@@ -7,7 +7,6 @@ interface ActionCenterProps {
     isConnected: boolean;
     isCheckingIn: boolean;
     doCheckIn: () => void;
-    showSuccess: boolean;
     txStatus: "idle" | "pending" | "success" | "failed";
     lastTxId: string | null;
 }
@@ -17,7 +16,7 @@ const itemVariants = {
     visible: { opacity: 1, y: 0 }
 };
 
-export function ActionCenter({ isConnected, isCheckingIn, doCheckIn, showSuccess, txStatus, lastTxId }: ActionCenterProps) {
+export function ActionCenter({ isConnected, isCheckingIn, doCheckIn, txStatus, lastTxId }: ActionCenterProps) {
     return (
         <motion.div variants={itemVariants} className="lg:col-span-2 glass-card p-8 md:p-12 relative overflow-hidden group border border-white/5 border-beam">
             <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none transition-transform group-hover:scale-110 group-hover:rotate-6">
@@ -52,7 +51,7 @@ export function ActionCenter({ isConnected, isCheckingIn, doCheckIn, showSuccess
                     </button>
 
                     <AnimatePresence>
-                        {(showSuccess || txStatus !== "idle") && (
+                        {txStatus !== "idle" && (
                             <motion.div
                                 initial={{ opacity: 0, x: -20 }}
                                 animate={{ opacity: 1, x: 0 }}
