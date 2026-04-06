@@ -38,7 +38,9 @@ export function Dashboard() {
         userData,
         doCheckIn,
         isCheckingIn,
-        showSuccess
+        showSuccess,
+        txStatus,
+        lastTxId
     } = useStacks();
 
     // Market & Network Data from Hooks
@@ -160,6 +162,8 @@ export function Dashboard() {
                                 isCheckingIn={isCheckingIn}
                                 doCheckIn={doCheckIn}
                                 showSuccess={showSuccess}
+                                txStatus={txStatus}
+                                lastTxId={lastTxId}
                             />
 
                             <motion.div variants={itemVariants} className="lg:col-span-1">

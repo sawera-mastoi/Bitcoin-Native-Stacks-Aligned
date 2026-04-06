@@ -15,6 +15,8 @@ interface StacksContextType {
   showSuccess: boolean;
   pulseSuccess: boolean;
   pulseTxId: string | null;
+  txStatus: "idle" | "pending" | "success" | "failed";
+  lastTxId: string | null;
 }
 
 const StacksContext = createContext<StacksContextType | undefined>(undefined);
@@ -121,6 +123,39 @@ export function StacksProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const [txStatus, setTxStatus] = useState<"idle" | "pending" | "success" | "failed">("idle");
+  const [lastTxId, setLastTxId] = useState<string | null>(null);
+
+  const pollTxStatus = async (txId: string) => {
+    setTxStatus("pending");
+    setLastTxId(txId);
+
+    const check = async () => {
+      try {
+        const { HIRO_API_BASE } = await import("@/config/constants");
+        const res = await fetch(`${HIRO_API_BASE}/extended/v1/tx/${txId}`);
+        if (!res.ok) return "pending";
+        const data = await res.json();
+        return data.tx_status;
+      } catch (e) {
+        return "pending";
+      }
+    };
+
+    const interval = setInterval(async () => {
+      const status = await check();
+      if (status === "success") {
+        setTxStatus("success");
+        clearInterval(interval);
+        setTimeout(() => setTxStatus("idle"), 10000);
+      } else if (status === "failed" || status === "dropped") {
+        setTxStatus("failed");
+        clearInterval(interval);
+        setTimeout(() => setTxStatus("idle"), 10000);
+      }
+    }, 10000);
+  };
+
   const doCheckIn = async () => {
     if (!sdks || !userData) return;
     setIsCheckingIn(true);
@@ -128,11 +163,6 @@ export function StacksProvider({ children }: { children: ReactNode }) {
 
     try {
       const network = sdks.network.STACKS_MAINNET;
-      const stxAddress = userData.profile.stxAddress.mainnet;
-      const amount = 10000; // 0.01 STX
-
-      // Use Allow mode without strict post-conditions to support self-spending during tests.
-      // Use constants for better reliability
       const { STACKS_CONTRACT_ADDRESS, STACKS_CONTRACT_NAME } = await import("@/config/constants");
 
       await sdks.connect.openContractCall({
@@ -147,6 +177,7 @@ export function StacksProvider({ children }: { children: ReactNode }) {
           console.log("Transaction broadcasted:", data.txId);
           setIsCheckingIn(false);
           setShowSuccess(true);
+          pollTxStatus(data.txId);
           setTimeout(() => setShowSuccess(false), 5000);
         },
         onCancel: () => {
@@ -155,6 +186,7 @@ export function StacksProvider({ children }: { children: ReactNode }) {
       });
     } catch (error) {
       console.error("Check-in error:", error);
+      setIsCheckingIn(false);
     }
   };
 
@@ -179,6 +211,7 @@ export function StacksProvider({ children }: { children: ReactNode }) {
           setIsPulsing(false);
           setPulseSuccess(true);
           setPulseTxId(data.txId);
+          pollTxStatus(data.txId);
           setTimeout(() => {
             setPulseSuccess(false);
             setPulseTxId(null);
@@ -208,7 +241,9 @@ export function StacksProvider({ children }: { children: ReactNode }) {
         isPulsing,
         showSuccess,
         pulseSuccess,
-        pulseTxId
+        pulseTxId,
+        txStatus,
+        lastTxId
       }}
     >
       {children}
