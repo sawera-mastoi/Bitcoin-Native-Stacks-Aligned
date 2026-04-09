@@ -23,18 +23,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # The branches we want to create PRs for
           BRANCHES=(
-            "refactor/dashboard-components"
-            "feat/tx-polling"
-            "fix/type-safety"
-            "feat/accessibility"
-            "feat/toast-notifications"
-            "perf/memoization"
-            "feat/user-preferences"
-            "feat/ecosystem-extension"
-            "dx/linting-rules"
-            "feat/docs-and-polish"
+            "chore/update-readme-spacing"
+            "refactor/clean-app-types"
+            "feat/add-footer-comments"
+            "fix/remove-unused-vars"
+            "docs/add-inline-docs"
           )
           
           # Iterate over each branch and try to create a PR
