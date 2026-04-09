@@ -75,3 +75,5 @@ export function ActivityFeed({ activity, isLoading, variants, isCompact }: Activ
         </motion.div>
     );
 }
+
+// Inline docs verified
