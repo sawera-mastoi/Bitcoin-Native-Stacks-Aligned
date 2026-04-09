@@ -59,3 +59,5 @@ export interface HiroTxResponse {
     sender_address: string;
     burn_block_time: number;
 }
+
+// Type clean up verification line
