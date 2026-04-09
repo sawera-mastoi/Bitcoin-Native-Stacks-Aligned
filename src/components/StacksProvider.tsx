@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from "react";
+import { useToast } from "./ui/ToastProvider";
 
 interface StacksContextType {
   userData: any;
@@ -15,9 +16,10 @@ interface StacksContextType {
   showSuccess: boolean;
   pulseSuccess: boolean;
   pulseTxId: string | null;
+  txStatus: "idle" | "pending" | "success" | "failed";
+  lastTxId: string | null;
   stxBalance: number | null;
 }
-
 
 const StacksContext = createContext<StacksContextType | undefined>(undefined);
 
@@ -32,7 +34,9 @@ export function StacksProvider({ children }: { children: ReactNode }) {
   const [pulseSuccess, setPulseSuccess] = useState(false);
   const [pulseTxId, setPulseTxId] = useState<string | null>(null);
   const [stxBalance, setStxBalance] = useState<number | null>(null);
-
+  const [txStatus, setTxStatus] = useState<"idle" | "pending" | "success" | "failed">("idle");
+  const [lastTxId, setLastTxId] = useState<string | null>(null);
+  const { toast } = useToast();
 
   // Stored references for browser-only SDKs
   const [sdks, setSdks] = useState<{
@@ -102,43 +106,71 @@ export function StacksProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const connectWallet = async () => {
+  const pollTxStatus = useCallback(async (txId: string) => {
+    setTxStatus("pending");
+    setLastTxId(txId);
+    toast({ title: "Transaction Broadcasted", description: "Monitoring status on-chain...", variant: "loading" });
+
+    const check = async (): Promise<"success" | "pending" | "failed" | "dropped"> => {
+      try {
+        const { HIRO_API_BASE } = await import("@/config/constants");
+        const res = await fetch(`${HIRO_API_BASE}/extended/v1/tx/${txId}`);
+        if (!res.ok) return "pending";
+        const data: any = await res.json();
+        return data.tx_status;
+      } catch (e) {
+        return "pending";
+      }
+    };
+
+    const interval = setInterval(async () => {
+      const status = await check();
+      if (status === "success") {
+        setTxStatus("success");
+        toast({ title: "Transaction Confirmed", description: "Action successful!", variant: "success" });
+        clearInterval(interval);
+        setTimeout(() => setTxStatus("idle"), 10000);
+      } else if (status === "failed" || status === "dropped") {
+        setTxStatus("failed");
+        toast({ title: "Transaction Failed", description: `Status: ${status}`, variant: "error" });
+        clearInterval(interval);
+        setTimeout(() => setTxStatus("idle"), 10000);
+      }
+    }, 10000);
+  }, [toast]);
+
+  const connectWallet = useCallback(async () => {
     if (typeof window === 'undefined') return;
     try {
       const { wallet } = await import("@earnwithalee/stacksrank-sdk");
       const address = await wallet.connectWallet();
       if (address) {
-        // Sync with existing Connect session if needed, but SDK handles basic connection
-        // For compatibility with rest of app, we still use Connect session if possible
         if (sdks?.session) {
-           // Reloading as the SDK might use its own internal state management
            window.location.reload();
         }
+        toast({ title: "Wallet Connected", description: "Successfully authenticated with Stacks.", variant: "success" });
       }
     } catch (e) {
       console.error("Connection failed:", e);
+      toast({ title: "Connection Failed", variant: "error" });
     }
-  };
+  }, [sdks, toast]);
 
+  const disconnectWallet = useCallback(() => {
+    if (!sdks) return;
+    sdks.session.signUserOut();
+    setUserData(null);
+    toast({ title: "Wallet Disconnected", variant: "info" });
+  }, [sdks, toast]);
 
-  const disconnectWallet = () => {
-    if (sdks?.session) {
-      sdks.session.signUserOut();
-      setUserData(null);
-      window.location.reload();
-    }
-  };
-
-  const doCheckIn = async () => {
+  const doCheckIn = useCallback(async () => {
     if (!userData) return;
     setIsCheckingIn(true);
-    setShowSuccess(false);
-
     try {
       const { wallet } = await import("@earnwithalee/stacksrank-sdk");
       const { STACKS_CONTRACT_ADDRESS, STACKS_CONTRACT_NAME } = await import("@/config/constants");
 
-      await wallet.callContract({
+      const tx: any = await wallet.callContract({
         contract: `${STACKS_CONTRACT_ADDRESS}.${STACKS_CONTRACT_NAME}`,
         functionName: "check-in",
         functionArgs: [],
@@ -148,12 +180,17 @@ export function StacksProvider({ children }: { children: ReactNode }) {
       setIsCheckingIn(false);
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 5000);
+      if (tx && tx.txId) {
+        pollTxStatus(tx.txId);
+      } else {
+        toast({ title: "Check-in Initiated", variant: "success" });
+      }
     } catch (error) {
       console.error("Check-in error:", error);
       setIsCheckingIn(false);
+      toast({ title: "Error", description: "Failed to initiate transaction", variant: "error" });
     }
-  };
-
+  }, [userData, pollTxStatus, toast]);
 
   const doPulse = async () => {
     if (!userData) return;
@@ -173,7 +210,10 @@ export function StacksProvider({ children }: { children: ReactNode }) {
 
       setIsPulsing(false);
       setPulseSuccess(true);
-      if (tx && tx.txId) setPulseTxId(tx.txId);
+      if (tx && tx.txId) {
+        setPulseTxId(tx.txId);
+        pollTxStatus(tx.txId);
+      }
       setTimeout(() => {
         setPulseSuccess(false);
         setPulseTxId(null);
@@ -216,9 +256,10 @@ export function StacksProvider({ children }: { children: ReactNode }) {
         showSuccess,
         pulseSuccess,
         pulseTxId,
+        txStatus,
+        lastTxId,
         stxBalance
       }}
-
     >
       {children}
     </StacksContext.Provider>
