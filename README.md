@@ -83,3 +83,5 @@ This project is actively synced with Talent Protocol to track builder reputation
 
 ## Architecture
 Uses Next.js App Router and Stacks.js.
+
+<!-- Update spacing check -->
